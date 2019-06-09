@@ -2,29 +2,44 @@
 Provides access to database tables.
 """
 
+from sqlalchemy import create_engine
+import pandas as pd
 import sqlite3
 import os.path
 
-_conn = None
+_DB_FILE = 'data/db.sqlite'
+_sqlite_conn = None
+_sqlalchemy_engine = None
+# Use sqlite3 and sqlalchemy simultaneously. Will this cause any problem?
 
 
-def _get_connection():
+def _get_sqlite_connection():
     """
-    Return the connection, establishing one if none exists.
+    Returns the connection, establishing one if none exists.
     """
-    global _conn
-    if _conn is None:
-        db_file = 'data/db.sqlite'
-        assert os.path.isfile(db_file)
-        _conn = sqlite3.connect(db_file)
-    return _conn
+    global _sqlite_conn
+    if _sqlite_conn is None:
+        assert os.path.isfile(_DB_FILE)
+        _sqlite_conn = sqlite3.connect(_DB_FILE)
+    return _sqlite_conn
+
+
+def _get_sqlalchemy_engine():
+    """
+    Returns the engine, establishing one if none exists.
+    """
+    global _sqlalchemy_engine
+    if _sqlalchemy_engine is None:
+        assert os.path.isfile(_DB_FILE)
+        _sqlalchemy_engine = create_engine('sqlite:///' + _DB_FILE)
+    return _sqlalchemy_engine
 
 
 def _check_table_exists(table):
     """
     Check that `table` exists. If not, raise an exception.
     """
-    conn = _get_connection()
+    conn = _get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table,))
     if cursor.fetchone() is None:
@@ -37,7 +52,7 @@ def add_record(table: str, column_value: dict):
 
     Args:
         table: Table name
-        column_value: A dictionary (column: value)
+        column_value: A dictionary (column: value), without 'id' key.
 
     Returns:
         If the table has "id" column, returns the ID of the newly added record.
@@ -45,12 +60,13 @@ def add_record(table: str, column_value: dict):
     """
     _check_table_exists(table)
 
-    conn = _get_connection()
+    conn = _get_sqlite_connection()
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM {} LIMIT 1;".format(table))
     has_id_column = 'id' in (t[0] for t in cursor.description)
 
+    assert 'id' not in column_value
     new_id = None
     if has_id_column:
         cursor.execute("SELECT MAX(id) FROM {};".format(table))
@@ -79,6 +95,43 @@ def add_record(table: str, column_value: dict):
     return new_id
 
 
+def update_record(table: str, column_value: dict):
+    """
+    Update a record in the table. The table must have a 'id' field.
+    The record with the id equal to that given in `column_value` gets updated.
+
+    Args:
+        table: Table name.
+        column_value: A dictionary of column-value pairs. Must include 'id' key.
+    """
+    assert 'id' in column_value
+    _check_table_exists(table)
+
+    conn = _get_sqlite_connection()
+    cursor = conn.cursor()
+    sql = ("UPDATE {} SET "
+           + ','.join([col + '=?' for col in column_value.keys() if col != 'id'])
+           + " WHERE id=?;").format(table)
+    parameters = [v for col, v in column_value.items() if col != 'id'] + [column_value['id']]
+    cursor.execute(sql, parameters)
+    conn.commit()
+
+
+def delete_record(table: str, record_id: int):
+    """
+    Delete the record with id = `record_id` from the table `table`.
+    Args:
+        table: Table name. The table must have an "id" column.
+        record_id: ID of the record to be deleted.
+    """
+    _check_table_exists(table)
+
+    conn = _get_sqlite_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM {} WHERE id=?".format(table), (record_id,))
+    conn.commit()
+
+
 def query_where_equal(table, columns, column_value=None, limit=None):
     """
     Query the table with WHERE condition.
@@ -96,7 +149,7 @@ def query_where_equal(table, columns, column_value=None, limit=None):
     """
     _check_table_exists(table)
 
-    conn = _get_connection()
+    conn = _get_sqlite_connection()
     cursor = conn.cursor()
     columns_query = ','.join(columns)
     parameters = []
@@ -117,3 +170,17 @@ def query_where_equal(table, columns, column_value=None, limit=None):
     cursor.execute(sql, parameters)
     return cursor.fetchall()
 
+
+def read_table(table: str):
+    """
+    Read a whole table.
+
+    Args:
+        table: Table name.
+        
+    Returns:
+        A pandas DataFrame.
+    """
+    engine = _get_sqlalchemy_engine()
+    df = pd.read_sql_query("SELECT * FROM {};".format(table), engine)
+    return df
