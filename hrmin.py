@@ -71,3 +71,7 @@ class HrMin:
             The resulting (hr, mn).
         """
         return hr + mn // 60, mn % 60
+
+    def __str__(self):
+        return '{:02d}:{:02d}'.format(self.hr, self.minute)
+

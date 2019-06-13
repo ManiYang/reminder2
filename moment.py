@@ -65,6 +65,10 @@ class Moment:
 
     @property
     def type(self):
+        """
+        Returns:
+            None if the object is not set.
+        """
         if self.scene_id:
             return Moment.TYPE_SCENE
         elif self.hrmin:
@@ -75,3 +79,18 @@ class Moment:
             return Moment.TYPE_OCCASION_END
         else:
             return None
+
+    def __str__(self):
+        if self.scene_id:
+            return 'scene {}'.format(self.scene_id)
+        elif self.hrmin:
+            return str(self.hrmin)
+        elif self.start_of_occasion_id:
+            return 'occasion {} start'.format(self.start_of_occasion_id)
+        elif self.end_of_occasion_id:
+            return 'occasion {} end'.format(self.end_of_occasion_id)
+        else:
+            return 'none'
+
+    def __repr__(self):
+        return str(self)

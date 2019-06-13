@@ -83,6 +83,10 @@ class Period:
 
     @property
     def type(self):
+        """
+        Returns:
+            None if the object is not set.
+        """
         if self.start_moment.type == Moment.TYPE_HRMIN:
             return Period.TYPE_TIME_INTERVAL
         elif self.start_moment.type == Moment.TYPE_SCENE:
@@ -96,3 +100,14 @@ class Period:
             return Period.TYPE_OCCASION_END_EXTENDED
         else:
             return None
+
+    def __str__(self):
+        if self.start_moment is None:
+            return 'none'
+
+        assert self.start_moment.type is not None
+        if self.start_moment.type == Moment.TYPE_OCCASION_START and self.span is None:
+            return 'occasion {}'.format(self.start_moment.start_of_occasion_id)
+
+        assert self.span is not None
+        return 'since {} for {}'.format(self.start_moment, self.span)
